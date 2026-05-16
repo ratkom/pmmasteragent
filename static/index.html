@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PM Master Agent</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f8f8f6;
+    --surface: #ffffff;
+    --surface2: #f3f2ee;
+    --border: rgba(0,0,0,0.1);
+    --text: #1a1a18;
+    --text2: #6b6b67;
+    --text3: #9b9b96;
+    --purple: #534AB7;
+    --purple-light: #EEEDFE;
+    --teal: #0F6E56;
+    --teal-light: #E1F5EE;
+    --coral: #993C1D;
+    --coral-light: #FAECE7;
+    --amber: #854F0B;
+    --amber-light: #FAEEDA;
+    --red: #A32D2D;
+    --red-light: #FCEBEB;
+    --green: #3B6D11;
+    --green-light: #EAF3DE;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18;
+      --surface: #242422;
+      --surface2: #2e2e2c;
+      --border: rgba(255,255,255,0.1);
+      --text: #f0efe9;
+      --text2: #a0a09a;
+      --text3: #6b6b67;
+      --purple-light: #26215C;
+      --teal-light: #04342C;
+      --coral-light: #4A1B0C;
+      --amber-light: #412402;
+      --red-light: #501313;
+      --green-light: #173404;
+    }
+  }
+
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  #root { display: flex; height: 100vh; overflow: hidden; }
+
+  .sidebar {
+    width: 220px; min-width: 220px; background: var(--surface);
+    border-right: 0.5px solid var(--border); display: flex;
+    flex-direction: column; padding: 1.25rem 0;
+  }
+
+  .sidebar-logo {
+    padding: 0 1.25rem 1.25rem;
+    border-bottom: 0.5px solid var(--border);
+    font-size: 15px; font-weight: 500; color: var(--text);
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .sidebar-logo .dot {
+    width: 24px; height: 24px; border-radius: 6px;
+    background: var(--purple); display: flex; align-items: center;
+    justify-content: center; color: white; font-size: 12px; font-weight: 500;
+  }
+
+  .nav { padding: 1rem 0.75rem; display: flex; flex-direction: column; gap: 2px; flex: 1; }
+
+  .nav-item {
+    padding: 7px 12px; border-radius: var(--radius-sm);
+    font-size: 13px; color: var(--text2); cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+    border: none; background: none; width: 100%; text-align: left;
+    transition: background 0.15s;
+  }
+
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: var(--purple-light); color: var(--purple); font-weight: 500; }
+
+  .nav-icon { font-size: 15px; opacity: 0.8; }
+
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .topbar {
+    padding: 1rem 1.5rem; background: var(--surface);
+    border-bottom: 0.5px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .topbar-title { font-size: 15px; font-weight: 500; }
+
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
+
+  .btn {
+    padding: 6px 14px; border-radius: var(--radius-sm);
+    font-size: 13px; cursor: pointer; border: 0.5px solid var(--border);
+    background: var(--surface2); color: var(--text); font-weight: 400;
+    transition: background 0.15s;
+  }
+
+  .btn:hover { background: var(--border); }
+
+  .btn-primary {
+    background: var(--purple); color: white; border-color: var(--purple);
+  }
+
+  .btn-primary:hover { opacity: 0.9; }
+
+  .content { flex: 1; overflow-y: auto; padding: 1.5rem; }
+
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+
+  .metric-card {
+    background: var(--surface2); border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+  }
+
+  .metric-label { font-size: 12px; color: var(--text3); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .metric-value { font-size: 26px; font-weight: 500; color: var(--text); }
+  .metric-sub { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+  .card {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: var(--radius); margin-bottom: 1rem; overflow: hidden;
+  }
+
+  .card-header {
+    padding: 0.875rem 1.25rem; border-bottom: 0.5px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .card-title { font-size: 13px; font-weight: 500; color: var(--text); }
+
+  .card-body { padding: 1.25rem; }
+
+  .risk-badge {
+    padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 500;
+  }
+
+  .risk-LOW { background: var(--green-light); color: var(--green); }
+  .risk-MEDIUM { background: var(--amber-light); color: var(--amber); }
+  .risk-HIGH { background: var(--coral-light); color: var(--coral); }
+  .risk-CRITICAL { background: var(--red-light); color: var(--red); }
+
+  .issue-row {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 0; border-bottom: 0.5px solid var(--border);
+    font-size: 13px;
+  }
+
+  .issue-row:last-child { border-bottom: none; padding-bottom: 0; }
+
+  .issue-id { font-size: 11px; color: var(--text3); min-width: 60px; font-family: monospace; padding-top: 1px; }
+  .issue-title { flex: 1; color: var(--text); }
+  .issue-meta { font-size: 11px; color: var(--text3); white-space: nowrap; }
+
+  .dot-red { width: 7px; height: 7px; border-radius: 50%; background: var(--red); margin-top: 4px; flex-shrink: 0; }
+  .dot-amber { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); margin-top: 4px; flex-shrink: 0; }
+  .dot-green { width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-top: 4px; flex-shrink: 0; }
+
+  .chat-panel {
+    width: 340px; min-width: 340px; background: var(--surface);
+    border-left: 0.5px solid var(--border); display: flex; flex-direction: column;
+  }
+
+  .chat-header {
+    padding: 1rem 1.25rem; border-bottom: 0.5px solid var(--border);
+    font-size: 13px; font-weight: 500;
+  }
+
+  .chat-messages { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 10px; }
+
+  .msg { max-width: 88%; font-size: 13px; line-height: 1.5; }
+
+  .msg-user {
+    align-self: flex-end; background: var(--purple); color: white;
+    padding: 8px 12px; border-radius: 14px 14px 3px 14px;
+  }
+
+  .msg-agent {
+    align-self: flex-start; background: var(--surface2); color: var(--text);
+    padding: 8px 12px; border-radius: 14px 14px 14px 3px;
+  }
+
+  .msg-agent.thinking { color: var(--text3); font-style: italic; }
+
+  .chat-input-area {
+    padding: 0.875rem; border-top: 0.5px solid var(--border);
+    display: flex; gap: 8px;
+  }
+
+  .chat-input {
+    flex: 1; padding: 8px 12px; border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border); background: var(--surface2);
+    color: var(--text); font-size: 13px; outline: none; resize: none;
+    font-family: inherit;
+  }
+
+  .chat-input:focus { border-color: var(--purple); }
+
+  .send-btn {
+    padding: 8px 14px; background: var(--purple); color: white;
+    border: none; border-radius: var(--radius-sm); cursor: pointer;
+    font-size: 13px;
+  }
+
+  .send-btn:hover { opacity: 0.9; }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .empty { color: var(--text3); font-size: 13px; text-align: center; padding: 2rem 0; }
+
+  .progress-bar { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--purple); border-radius: 2px; transition: width 0.3s; }
+
+  .tag {
+    display: inline-block; padding: 2px 8px; border-radius: 20px;
+    font-size: 11px; background: var(--surface2); color: var(--text2);
+  }
+
+  .activity-row {
+    display: flex; gap: 10px; padding: 8px 0;
+    border-bottom: 0.5px solid var(--border); font-size: 12px;
+  }
+
+  .activity-row:last-child { border-bottom: none; }
+  .activity-time { color: var(--text3); min-width: 50px; padding-top: 1px; }
+  .activity-text { color: var(--text2); flex: 1; }
+  .activity-agent { color: var(--purple); font-weight: 500; }
+
+  .spinner {
+    display: inline-block; width: 12px; height: 12px;
+    border: 2px solid var(--border); border-top-color: var(--purple);
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const API_BASE = window.location.origin;
+const SESSION_ID = 'dashboard-' + Math.random().toString(36).slice(2, 8);
+
+function timeAgo(iso) {
+  const d = new Date(iso);
+  const s = Math.floor((Date.now() - d) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+
+function RiskBadge({ level }) {
+  return <span className={`risk-badge risk-${level || 'LOW'}`}>{level || 'LOW'}</span>;
+}
+
+function MetricCard({ label, value, sub }) {
+  return (
+    <div className="metric-card">
+      <div className="metric-label">{label}</div>
+      <div className="metric-value">{value}</div>
+      {sub && <div className="metric-sub">{sub}</div>}
+    </div>
+  );
+}
+
+function Dashboard({ activity, riskData, sessionData }) {
+  const milestones = sessionData?.milestones_count ?? 0;
+  const tasks = sessionData?.tasks_count ?? 0;
+  const riskLevel = riskData?.risk_level ?? '—';
+  const risks = riskData?.risks ?? [];
+
+  const overdueIssues = risks.flatMap(r => r.overdue_issues || []);
+  const stalledIssues = risks.flatMap(r => r.stalled_issues || []);
+  const atRiskProjects = risks.flatMap(r => r.projects_at_risk || []);
+
+  return (
+    <div className="content">
+      <div className="grid-2">
+        <MetricCard label="Milestones created" value={milestones} sub="this session" />
+        <MetricCard label="Tasks created" value={tasks} sub="this session" />
+        <MetricCard label="Overdue issues" value={overdueIssues.length} sub="in Linear" />
+        <MetricCard label="Risk level" value={riskLevel !== '—' ? riskLevel : '—'} sub="last scan" />
+      </div>
+
+      {overdueIssues.length > 0 && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Overdue issues</span>
+            <RiskBadge level="HIGH" />
+          </div>
+          <div className="card-body" style={{padding: '0 1.25rem'}}>
+            {overdueIssues.slice(0,6).map((i,idx) => (
+              <div key={idx} className="issue-row">
+                <div className="dot-red" />
+                <span className="issue-id">{i.identifier}</span>
+                <span className="issue-title">{i.title}</span>
+                <span className="issue-meta">{i.due_date}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {stalledIssues.length > 0 && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Stalled work</span>
+            <RiskBadge level="MEDIUM" />
+          </div>
+          <div className="card-body" style={{padding: '0 1.25rem'}}>
+            {stalledIssues.slice(0,6).map((i,idx) => (
+              <div key={idx} className="issue-row">
+                <div className="dot-amber" />
+                <span className="issue-id">{i.identifier}</span>
+                <span className="issue-title">{i.title}</span>
+                <span className="issue-meta">{i.days_inactive}d inactive</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {atRiskProjects.length > 0 && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Projects at risk</span>
+            <RiskBadge level="HIGH" />
+          </div>
+          <div className="card-body" style={{padding: '0 1.25rem'}}>
+            {atRiskProjects.map((p,idx) => (
+              <div key={idx} className="issue-row" style={{flexDirection:'column', gap: 6}}>
+                <div style={{display:'flex', alignItems:'center', gap:8}}>
+                  <div className="dot-red" style={{marginTop:0}} />
+                  <span style={{fontWeight:500, fontSize:13}}>{p.name}</span>
+                  <span className="issue-meta">{p.progress_pct}% done</span>
+                </div>
+                <div className="progress-bar" style={{marginLeft:15}}>
+                  <div className="progress-fill" style={{width: p.progress_pct + '%'}} />
+                </div>
+                {p.risk_reasons.map((r,i) => (
+                  <span key={i} style={{marginLeft:15, fontSize:12, color:'var(--text3)'}}>{r}</span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {overdueIssues.length === 0 && stalledIssues.length === 0 && atRiskProjects.length === 0 && riskData && (
+        <div className="card">
+          <div className="card-body">
+            <p className="empty">No risks detected — all clear</p>
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-header">
+          <span className="card-title">Recent activity</span>
+        </div>
+        <div className="card-body" style={{padding: '0 1.25rem'}}>
+          {activity.length === 0 && <p className="empty">No activity yet — ask the agent something</p>}
+          {activity.map((a,idx) => (
+            <div key={idx} className="activity-row">
+              <span className="activity-time">{timeAgo(a.time)}</span>
+              <span className="activity-text">
+                <span className="activity-agent">{a.agent}</span> — {a.summary}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChatPanel({ onActivity, onRiskData, onSessionData }) {
+  const [messages, setMessages] = useState([
+    { role: 'agent', text: 'Hi! Ask me to scan for risks, plan a project, or check project status.' }
+  ]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || loading) return;
+
+    setInput('');
+    setMessages(m => [...m, { role: 'user', text }]);
+    setLoading(true);
+    setMessages(m => [...m, { role: 'agent', text: 'Thinking...', thinking: true }]);
+
+    try {
+      const res = await fetch(`${API_BASE}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, session_id: SESSION_ID }),
+      });
+      const data = await res.json();
+
+      setMessages(m => {
+        const copy = [...m];
+        copy[copy.length - 1] = { role: 'agent', text: data.reply };
+        return copy;
+      });
+
+      // Update dashboard data
+      if (data.agent_used === 'risk_monitor' && data.plan) {
+        onRiskData(data.plan);
+      }
+
+      // Record activity
+      if (data.agent_used) {
+        onActivity({
+          time: new Date().toISOString(),
+          agent: data.agent_used === 'planner' ? 'Planner' : 'Risk Monitor',
+          summary: text.slice(0, 60) + (text.length > 60 ? '...' : ''),
+        });
+      }
+
+      // Refresh session state
+      const sessionRes = await fetch(`${API_BASE}/session/${SESSION_ID}`);
+      if (sessionRes.ok) {
+        onSessionData(await sessionRes.json());
+      }
+
+    } catch (e) {
+      setMessages(m => {
+        const copy = [...m];
+        copy[copy.length - 1] = { role: 'agent', text: 'Something went wrong. Please try again.' };
+        return copy;
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onKey = e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  };
+
+  return (
+    <div className="chat-panel">
+      <div className="chat-header">Agent chat</div>
+      <div className="chat-messages">
+        {messages.map((m, i) => (
+          <div key={i} className={`msg ${m.role === 'user' ? 'msg-user' : 'msg-agent'} ${m.thinking ? 'thinking' : ''}`}>
+            {m.thinking ? <><span className="spinner" style={{marginRight:6}} />{m.text}</> : m.text}
+          </div>
+        ))}
+        <div ref={bottomRef} />
+      </div>
+      <div className="chat-input-area">
+        <textarea
+          className="chat-input"
+          rows={2}
+          placeholder="Ask the agent..."
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={onKey}
+        />
+        <button className="send-btn" onClick={send} disabled={loading || !input.trim()}>
+          Send
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [page, setPage] = useState('dashboard');
+  const [activity, setActivity] = useState([]);
+  const [riskData, setRiskData] = useState(null);
+  const [sessionData, setSessionData] = useState(null);
+  const [scanning, setScanning] = useState(false);
+
+  const addActivity = useCallback(a => {
+    setActivity(prev => [a, ...prev].slice(0, 20));
+  }, []);
+
+  const scanRisks = async () => {
+    setScanning(true);
+    try {
+      const res = await fetch(`${API_BASE}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'Run a full risk scan', session_id: SESSION_ID }),
+      });
+      const data = await res.json();
+      if (data.plan) setRiskData(data.plan);
+      addActivity({ time: new Date().toISOString(), agent: 'Risk Monitor', summary: 'Automatic risk scan' });
+    } catch(e) {}
+    setScanning(false);
+  };
+
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+  ];
+
+  return (
+    <div id="root">
+      <div className="sidebar">
+        <div className="sidebar-logo">
+          <div className="dot">PM</div>
+          PM Master Agent
+        </div>
+        <nav className="nav">
+          {navItems.map(n => (
+            <button key={n.id} className={`nav-item ${page === n.id ? 'active' : ''}`} onClick={() => setPage(n.id)}>
+              <span>{n.icon}</span> {n.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      <div className="main">
+        <div className="topbar">
+          <span className="topbar-title">Dashboard</span>
+          <div className="topbar-right">
+            <button className="btn" onClick={scanRisks} disabled={scanning}>
+              {scanning ? 'Scanning...' : 'Scan risks'}
+            </button>
+          </div>
+        </div>
+
+        <Dashboard activity={activity} riskData={riskData} sessionData={sessionData} />
+      </div>
+
+      <ChatPanel onActivity={addActivity} onRiskData={setRiskData} onSessionData={setSessionData} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -130,3 +130,17 @@ if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
         print("[API] slack-bolt not installed — Slack endpoint skipped")
 else:
     print("[API] Slack tokens not set — Slack endpoint skipped")
+
+
+# ── Serve dashboard ───────────────────────────────────────────────────────────
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
+
+static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+    @app.get("/")
+    async def dashboard():
+        return FileResponse(os.path.join(static_dir, "index.html"))
