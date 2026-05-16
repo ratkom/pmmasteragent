@@ -181,7 +181,7 @@
 
   .chat-messages { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 10px; }
 
-  .msg { max-width: 88%; font-size: 13px; line-height: 1.5; }
+  .msg { max-width: 92%; font-size: 13px; line-height: 1.6; }
 
   .msg-user {
     align-self: flex-end; background: var(--purple); color: white;
@@ -190,10 +190,20 @@
 
   .msg-agent {
     align-self: flex-start; background: var(--surface2); color: var(--text);
-    padding: 8px 12px; border-radius: 14px 14px 14px 3px;
+    padding: 10px 14px; border-radius: 14px 14px 14px 3px; width: 92%;
   }
 
-  .msg-agent.thinking { color: var(--text3); font-style: italic; }
+  .msg-agent.thinking { color: var(--text3); font-style: italic; width: auto; }
+  .msg-agent p { margin: 0 0 6px; }
+  .msg-agent p:last-child { margin-bottom: 0; }
+  .msg-agent strong { font-weight: 500; color: var(--text); }
+  .msg-agent em { font-style: italic; color: var(--text2); }
+  .msg-agent ul, .msg-agent ol { margin: 6px 0 6px 16px; display: flex; flex-direction: column; gap: 3px; }
+  .msg-agent li { color: var(--text); }
+  .msg-agent .md-h { font-weight: 500; color: var(--text); margin: 8px 0 4px; font-size: 13px; }
+  .msg-agent .md-h:first-child { margin-top: 0; }
+  .msg-agent .md-code { font-family: monospace; font-size: 12px; background: var(--surface); color: var(--purple); padding: 1px 5px; border-radius: 4px; border: 0.5px solid var(--border); }
+  .msg-agent .md-hr { border: none; border-top: 0.5px solid var(--border); margin: 8px 0; }
 
   .chat-input-area {
     padding: 0.875rem; border-top: 0.5px solid var(--border);
@@ -390,6 +400,87 @@ function Dashboard({ activity, riskData, sessionData }) {
   );
 }
 
+function parseMarkdown(text) {
+  const lines = text.split('
+');
+  const elements = [];
+  let i = 0;
+
+  const inlineFormat = (str) => {
+    const parts = [];
+    let buf = '';
+    let j = 0;
+    while (j < str.length) {
+      if (str[j] === '*' && str[j+1] === '*') {
+        const end = str.indexOf('**', j+2);
+        if (end !== -1) {
+          if (buf) parts.push(buf); buf = '';
+          parts.push(React.createElement('strong', {key: j}, str.slice(j+2, end)));
+          j = end + 2; continue;
+        }
+      }
+      if (str[j] === '*' && str[j+1] !== '*') {
+        const end = str.indexOf('*', j+1);
+        if (end !== -1) {
+          if (buf) parts.push(buf); buf = '';
+          parts.push(React.createElement('em', {key: j}, str.slice(j+1, end)));
+          j = end + 1; continue;
+        }
+      }
+      if (str[j] === '`') {
+        const end = str.indexOf('`', j+1);
+        if (end !== -1) {
+          if (buf) parts.push(buf); buf = '';
+          parts.push(React.createElement('code', {key: j, className: 'md-code'}, str.slice(j+1, end)));
+          j = end + 1; continue;
+        }
+      }
+      buf += str[j]; j++;
+    }
+    if (buf) parts.push(buf);
+    return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : parts;
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i++; continue; }
+
+    if (line.startsWith('### ')) {
+      elements.push(React.createElement('div', {key: i, className: 'md-h'}, inlineFormat(line.slice(4))));
+    } else if (line.startsWith('## ')) {
+      elements.push(React.createElement('div', {key: i, className: 'md-h'}, inlineFormat(line.slice(3))));
+    } else if (line.startsWith('# ')) {
+      elements.push(React.createElement('div', {key: i, className: 'md-h'}, inlineFormat(line.slice(2))));
+    } else if (line.match(/^---+$/)) {
+      elements.push(React.createElement('hr', {key: i, className: 'md-hr'}));
+    } else if (line.match(/^[-*] /)) {
+      const items = [];
+      while (i < lines.length && lines[i].match(/^[-*] /)) {
+        items.push(React.createElement('li', {key: i}, inlineFormat(lines[i].slice(2))));
+        i++;
+      }
+      elements.push(React.createElement('ul', {key: 'ul'+i}, items));
+      continue;
+    } else if (line.match(/^\d+\. /)) {
+      const items = [];
+      while (i < lines.length && lines[i].match(/^\d+\. /)) {
+        items.push(React.createElement('li', {key: i}, inlineFormat(lines[i].replace(/^\d+\. /, ''))));
+        i++;
+      }
+      elements.push(React.createElement('ol', {key: 'ol'+i}, items));
+      continue;
+    } else {
+      elements.push(React.createElement('p', {key: i}, inlineFormat(line)));
+    }
+    i++;
+  }
+  return elements;
+}
+
+function MarkdownMsg({ text }) {
+  return React.createElement(React.Fragment, null, ...parseMarkdown(text));
+}
+
 function ChatPanel({ onActivity, onRiskData, onSessionData }) {
   const [messages, setMessages] = useState([
     { role: 'agent', text: 'Hi! Ask me to scan for risks, plan a project, or check project status.' }
@@ -466,7 +557,11 @@ function ChatPanel({ onActivity, onRiskData, onSessionData }) {
       <div className="chat-messages">
         {messages.map((m, i) => (
           <div key={i} className={`msg ${m.role === 'user' ? 'msg-user' : 'msg-agent'} ${m.thinking ? 'thinking' : ''}`}>
-            {m.thinking ? <><span className="spinner" style={{marginRight:6}} />{m.text}</> : m.text}
+            {m.thinking
+            ? <><span className="spinner" style={{marginRight:6}} />Thinking...</>
+            : m.role === 'user'
+              ? m.text
+              : <MarkdownMsg text={m.text} />}
           </div>
         ))}
         <div ref={bottomRef} />
