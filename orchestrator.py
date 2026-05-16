@@ -15,7 +15,7 @@ Step 2+ will add: Risk monitor, Comms agent, Reporter routing.
 import anthropic
 from config.settings import CLAUDE_MODEL, DEBUG_VERBOSE
 from agents.planner import run_planner
-from memory.state_store import StateStore
+from memory.redis_store import StateStore
 
 ORCHESTRATOR_SYSTEM_PROMPT = """You are the orchestrator for an AI-powered project management system.
 
@@ -41,9 +41,9 @@ Rules:
 
 
 class Orchestrator:
-    def __init__(self):
+    def __init__(self, session_id: str = "default"):
         self.client = anthropic.Anthropic()
-        self.state = StateStore()
+        self.state = StateStore(session_id=session_id)
 
     def handle(self, user_input: str) -> dict:
         """

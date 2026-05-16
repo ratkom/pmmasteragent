@@ -71,7 +71,7 @@ def run_planner(request: str, project_id: str | None = None) -> dict:
     while True:
         response = client.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=4096,
+            max_tokens=8096,
             system=PLANNER_SYSTEM_PROMPT,
             tools=PLANNER_TOOL_SCHEMAS,
             messages=messages,

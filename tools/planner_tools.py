@@ -1,23 +1,20 @@
 """
-Planner tools — stubbed for Step 1.
-Each function mirrors what a real integration would do.
-Swap the body for a real API call when you're ready for Step 2.
+Planner tools — real Linear integration (Step 3)
+Each function calls Linear's GraphQL API via linear_client.py
 """
 
-import json
-from datetime import date, timedelta
+from tools.linear_client import (
+    create_project,
+    list_projects,
+    create_issue,
+    get_project_issues,
+)
 
 
 def create_milestone(name: str, due_date: str, description: str = "") -> dict:
-    """Create a project milestone. Stub returns a fake milestone ID."""
-    print(f"  [STUB] create_milestone: '{name}' due {due_date}")
-    return {
-        "milestone_id": f"MS-{abs(hash(name)) % 9000 + 1000}",
-        "name": name,
-        "due_date": due_date,
-        "description": description,
-        "status": "planned",
-    }
+    """Create a Linear project as a milestone."""
+    print(f"  [Linear] create_project: '{name}' due {due_date}")
+    return create_project(name=name, description=description, target_date=due_date)
 
 
 def create_task(
@@ -27,76 +24,37 @@ def create_task(
     effort_days: int = 1,
     dependencies: list[str] | None = None,
 ) -> dict:
-    """Create a task under a milestone. Stub returns a fake task ID."""
-    print(f"  [STUB] create_task: '{title}' → {milestone_id}")
-    return {
-        "task_id": f"T-{abs(hash(title)) % 9000 + 1000}",
-        "title": title,
-        "milestone_id": milestone_id,
-        "assignee": assignee,
-        "effort_days": effort_days,
-        "dependencies": dependencies or [],
-        "status": "todo",
-    }
+    """Create a Linear issue under a project."""
+    print(f"  [Linear] create_issue: '{title}' → project {milestone_id}")
+    result = create_issue(
+        title=title,
+        project_id=milestone_id,
+        assignee=assignee,
+        effort_days=effort_days,
+    )
+    result["dependencies"] = dependencies or []
+    return result
 
 
 def get_project_status(project_id: str) -> dict:
-    """Fetch overall project status. Stub returns a canned response."""
-    print(f"  [STUB] get_project_status: {project_id}")
-    today = date.today()
-    return {
-        "project_id": project_id,
-        "name": "Stub Project",
-        "health": "on_track",
-        "completion_pct": 34,
-        "milestones_total": 5,
-        "milestones_done": 1,
-        "next_milestone": {
-            "name": "Alpha release",
-            "due_date": str(today + timedelta(days=14)),
-        },
-        "overdue_tasks": 0,
-    }
+    """Get real project status from Linear."""
+    print(f"  [Linear] get_project_issues: {project_id}")
+    return get_project_issues(project_id)
 
 
-def list_milestones(project_id: str) -> dict:
-    """List all milestones for a project."""
-    print(f"  [STUB] list_milestones: {project_id}")
-    today = date.today()
-    return {
-        "project_id": project_id,
-        "milestones": [
-            {
-                "milestone_id": "MS-1001",
-                "name": "Discovery & scoping",
-                "due_date": str(today - timedelta(days=7)),
-                "status": "completed",
-            },
-            {
-                "milestone_id": "MS-1002",
-                "name": "Alpha release",
-                "due_date": str(today + timedelta(days=14)),
-                "status": "in_progress",
-            },
-            {
-                "milestone_id": "MS-1003",
-                "name": "Beta release",
-                "due_date": str(today + timedelta(days=45)),
-                "status": "planned",
-            },
-        ],
-    }
+def list_milestones(project_id: str = None) -> dict:
+    """List all Linear projects as milestones."""
+    print(f"  [Linear] list_projects")
+    return list_projects()
 
 
 # ── Tool registry ─────────────────────────────────────────────────────────────
-# This is what we hand to the Claude API as the `tools` parameter.
-# The schema tells Claude when and how to call each function.
 
 PLANNER_TOOL_SCHEMAS = [
     {
         "name": "create_milestone",
         "description": (
-            "Create a new project milestone with a name, due date, and optional description. "
+            "Create a new project milestone in Linear with a name, due date, and optional description. "
             "Use this when the user asks to set up milestones or phases for a project."
         ),
         "input_schema": {
@@ -112,14 +70,14 @@ PLANNER_TOOL_SCHEMAS = [
     {
         "name": "create_task",
         "description": (
-            "Create a task under an existing milestone. "
+            "Create a task (Linear issue) under an existing milestone (Linear project). "
             "Use this to break milestones into actionable work items."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "title": {"type": "string", "description": "Task title"},
-                "milestone_id": {"type": "string", "description": "ID of the parent milestone"},
+                "milestone_id": {"type": "string", "description": "Linear project ID of the parent milestone"},
                 "assignee": {"type": "string", "description": "Name or email of the assignee"},
                 "effort_days": {"type": "integer", "description": "Estimated effort in working days"},
                 "dependencies": {
@@ -133,24 +91,24 @@ PLANNER_TOOL_SCHEMAS = [
     },
     {
         "name": "get_project_status",
-        "description": "Get the current health, completion percentage, and milestone summary for a project.",
+        "description": "Get real-time health, completion percentage, and issue summary for a Linear project.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "project_id": {"type": "string", "description": "The project identifier"},
+                "project_id": {"type": "string", "description": "The Linear project ID"},
             },
             "required": ["project_id"],
         },
     },
     {
         "name": "list_milestones",
-        "description": "List all milestones for a project, including their status and due dates.",
+        "description": "List all Linear projects (milestones), including their status and due dates.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "project_id": {"type": "string", "description": "The project identifier"},
+                "project_id": {"type": "string", "description": "Optional — not required for listing"},
             },
-            "required": ["project_id"],
+            "required": [],
         },
     },
 ]
