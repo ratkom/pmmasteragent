@@ -1,15 +1,8 @@
 """
-Planner Agent
-─────────────
-Receives a planning request, calls Claude with the planner tool set,
-executes any tool calls, and returns the final structured plan.
-
-This is a fully autonomous agentic loop:
-  1. Send request to Claude
-  2. Claude responds with text and/or tool_use blocks
-  3. Execute tool calls, collect results
-  4. Feed results back to Claude
-  5. Repeat until Claude stops calling tools (end_turn)
+Planner Agent (Step 7 — with dry-run mode)
+───────────────────────────────────────────
+dry_run=True  → Claude plans but tools are intercepted, nothing written to Linear
+dry_run=False → Tools execute for real (called after user confirms)
 """
 
 import json
@@ -33,21 +26,39 @@ Rules:
 - Be concise in your final summary; the user can see the structured data
 """
 
+DRY_RUN_SYSTEM_PROMPT = """You are a senior project planner agent inside a project management system.
 
-def run_planner(request: str, project_id: str | None = None) -> dict:
+You are in PLANNING MODE — you will call the tools to show what you WOULD create,
+but the system will intercept the calls and ask the user to confirm before anything
+is actually written to Linear.
+
+Your job:
+- Analyse the user's project request
+- Call create_milestone and create_task tools as normal
+- Produce a clear summary of the plan you're proposing
+
+Be specific: real milestone names, realistic due dates, concrete task titles.
+Create milestones first, then tasks under them. Tasks should be 1-5 days effort each.
+"""
+
+
+def run_planner(request: str, project_id: str | None = None, dry_run: bool = False) -> dict:
     """
-    Run the Planner agent on a planning request.
+    Run the Planner agent.
 
     Args:
-        request:    Natural-language planning request from the orchestrator.
-        project_id: Optional existing project ID to plan against.
+        request:    Natural-language planning request.
+        project_id: Optional existing project ID.
+        dry_run:    If True, intercept write tools and return proposed actions
+                    without executing them.
 
     Returns:
         {
-          "summary": str,          # Agent's final text summary
-          "tool_calls": list,      # All tool calls made (name + inputs + result)
-          "milestones": list,      # Milestone objects created
-          "tasks": list,           # Task objects created
+          "summary":    str,
+          "tool_calls": list,
+          "milestones": list,
+          "tasks":      list,
+          "dry_run":    bool,
         }
     """
     client = anthropic.Anthropic()
@@ -58,43 +69,35 @@ def run_planner(request: str, project_id: str | None = None) -> dict:
 
     messages = [{"role": "user", "content": user_message}]
 
-    # Collected results across the agentic loop
     all_tool_calls = []
     milestones = []
     tasks = []
     final_summary = ""
 
-    if DEBUG_VERBOSE:
-        print(f"\n[Planner] Starting with request: {request[:120]}...")
+    system_prompt = DRY_RUN_SYSTEM_PROMPT if dry_run else PLANNER_SYSTEM_PROMPT
 
-    # ── Agentic loop ──────────────────────────────────────────────────────────
+    if DEBUG_VERBOSE:
+        print(f"\n[Planner] dry_run={dry_run}, request: {request[:120]}...")
+
     while True:
         response = client.messages.create(
             model=CLAUDE_MODEL,
             max_tokens=8096,
-            system=PLANNER_SYSTEM_PROMPT,
+            system=system_prompt,
             tools=PLANNER_TOOL_SCHEMAS,
             messages=messages,
         )
 
-        if DEBUG_VERBOSE:
-            print(f"[Planner] Stop reason: {response.stop_reason}")
-
-        # Collect any text content as a running summary
         for block in response.content:
             if block.type == "text":
                 final_summary = block.text
 
-        # If Claude is done, break out of the loop
         if response.stop_reason == "end_turn":
             break
 
-        # If Claude wants to use tools, execute them
         if response.stop_reason == "tool_use":
-            # Append Claude's response (including tool_use blocks) to history
             messages.append({"role": "assistant", "content": response.content})
 
-            # Execute each tool call and collect results
             tool_results = []
             for block in response.content:
                 if block.type != "tool_use":
@@ -103,30 +106,50 @@ def run_planner(request: str, project_id: str | None = None) -> dict:
                 tool_name = block.name
                 tool_input = block.input
 
-                print(f"\n[Planner → tool] {tool_name}({json.dumps(tool_input, indent=2)})")
+                print(f"\n[Planner → tool] {tool_name}({json.dumps(tool_input)[:80]}...)")
 
-                # Execute the stub/real function
-                executor = PLANNER_TOOL_EXECUTORS.get(tool_name)
-                if executor is None:
-                    result = {"error": f"Unknown tool: {tool_name}"}
+                # In dry_run mode, intercept write tools
+                if dry_run and tool_name in {"create_milestone", "create_task"}:
+                    # Return a fake success so Claude can complete its plan
+                    if tool_name == "create_milestone":
+                        result = {
+                            "milestone_id": f"PENDING-{abs(hash(tool_input.get('name',''))) % 9000}",
+                            "name": tool_input.get("name", ""),
+                            "due_date": tool_input.get("due_date", ""),
+                            "description": tool_input.get("description", ""),
+                            "status": "pending_approval",
+                        }
+                        milestones.append({**tool_input, "_pending": True})
+                    else:
+                        result = {
+                            "task_id": f"PENDING-{abs(hash(tool_input.get('title',''))) % 9000}",
+                            "title": tool_input.get("title", ""),
+                            "milestone_id": tool_input.get("milestone_id", ""),
+                            "effort_days": tool_input.get("effort_days", 1),
+                            "status": "pending_approval",
+                        }
+                        tasks.append({**tool_input, "_pending": True})
                 else:
-                    try:
-                        result = executor(**tool_input)
-                    except Exception as e:
-                        result = {"error": str(e)}
+                    # Execute for real
+                    executor = PLANNER_TOOL_EXECUTORS.get(tool_name)
+                    if executor is None:
+                        result = {"error": f"Unknown tool: {tool_name}"}
+                    else:
+                        try:
+                            result = executor(**tool_input)
+                        except Exception as e:
+                            result = {"error": str(e)}
 
-                print(f"[tool → Planner] {json.dumps(result, indent=2)}")
+                    if tool_name == "create_milestone":
+                        milestones.append(result)
+                    elif tool_name == "create_task":
+                        tasks.append(result)
 
-                # Track results for the caller
                 all_tool_calls.append({
                     "tool": tool_name,
                     "input": tool_input,
                     "result": result,
                 })
-                if tool_name == "create_milestone":
-                    milestones.append(result)
-                elif tool_name == "create_task":
-                    tasks.append(result)
 
                 tool_results.append({
                     "type": "tool_result",
@@ -134,12 +157,8 @@ def run_planner(request: str, project_id: str | None = None) -> dict:
                     "content": json.dumps(result),
                 })
 
-            # Feed results back to Claude for the next iteration
             messages.append({"role": "user", "content": tool_results})
-
         else:
-            # Unexpected stop reason — break to avoid infinite loop
-            print(f"[Planner] Unexpected stop reason: {response.stop_reason}")
             break
 
     return {
@@ -147,4 +166,5 @@ def run_planner(request: str, project_id: str | None = None) -> dict:
         "tool_calls": all_tool_calls,
         "milestones": milestones,
         "tasks": tasks,
+        "dry_run": dry_run,
     }
